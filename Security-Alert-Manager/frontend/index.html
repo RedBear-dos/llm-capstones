@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Alert Manager (Pro)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        
+        /* Chat Messages */
+        .chat-msg { margin-bottom: 12px; padding: 10px 14px; border-radius: 12px; max-width: 85%; line-height: 1.5; font-size: 0.9rem; word-wrap: break-word; }
+        .chat-user { background: #2563eb; color: white; margin-left: auto; border-bottom-right-radius: 2px; }
+        .chat-bot { background: #334155; color: #e2e8f0; border-bottom-left-radius: 2px; border: 1px solid #475569; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        /* Animations */
+        .slide-in-bottom { animation: slideIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+        .slide-out-bottom { animation: slideOut 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53) both; }
+        @keyframes slideIn { 0% { transform: translateY(20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+        @keyframes slideOut { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(20px); opacity: 0; } }
+        
+        /* Demo Badge */
+        .demo-badge { position: fixed; bottom: 90px; right: 20px; background: #eab308; color: black; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; opacity: 0.9; z-index: 40; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden relative">
+
+    <!-- Header -->
+    <header class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center shadow-lg z-10">
+        <div class="flex items-center gap-3">
+            <div class="bg-slate-800 p-2 rounded-lg border border-slate-600"><i class="fa-solid fa-shield-halved text-2xl text-green-500"></i></div>
+            <div><h1 class="text-xl font-bold tracking-wider text-white">SEC-ALERT MANAGER</h1><p class="text-xs text-slate-400 uppercase tracking-widest">AI-Powered SOC Dashboard</p></div>
+        </div>
+        <div class="flex gap-4">
+            <button onclick="fetchAlerts()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm transition font-medium flex items-center shadow-lg"><i class="fa-solid fa-rotate mr-2"></i> Refresh</button>
+            <div id="statusIndicator" class="text-green-400 text-sm flex items-center gap-2 border border-green-900 bg-green-900/20 px-3 rounded-full transition-all duration-300"><div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div> System Online</div>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="flex flex-1 overflow-hidden relative">
+        
+        <!-- Left Column: Alert List -->
+        <main class="flex-1 p-6 overflow-y-auto flex flex-col">
+            <h2 class="text-lg font-semibold mb-4 text-blue-300 flex items-center"><i class="fa-solid fa-list-ul mr-2"></i> Live Alerts Feed</h2>
+            <div class="glass-panel rounded-xl overflow-hidden shadow-2xl flex-1 flex flex-col">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-slate-800 text-slate-400 uppercase text-xs font-bold tracking-wider">
+                            <tr>
+                                <th class="p-4 border-b border-slate-700">Time</th>
+                                <th class="p-4 border-b border-slate-700">SEVERITY</th>
+                                <th class="p-4 border-b border-slate-700">Type</th>
+                                <th class="p-4 border-b border-slate-700">IP</th>
+                                <th class="p-4 border-b border-slate-700 w-10"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertTableBody" class="divide-y divide-slate-700 text-sm"><tr><td colspan="5" class="p-10 text-center text-slate-500 italic">Connecting...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Column: Detail Only (Full Height) -->
+        <aside class="w-[500px] bg-slate-900 border-l border-slate-700 flex flex-col shadow-2xl z-20">
+            <div class="p-4 bg-slate-800/50 border-b border-slate-700 flex justify-between items-center backdrop-blur-sm">
+                <h3 class="font-bold text-yellow-400 flex items-center"><i class="fa-solid fa-circle-info mr-2"></i> Alert Details</h3>
+                <span id="detailId" class="text-[10px] bg-slate-700 px-2 py-1 rounded text-slate-300 font-mono">ID: --</span>
+            </div>
+            <!-- Detail content tràn xuống hết màn hình -->
+            <div id="detailContent" class="flex-1 p-6 overflow-y-auto text-sm space-y-5 bg-slate-900">
+                <div class="flex flex-col items-center justify-center h-full text-slate-600 opacity-60">
+                    <i class="fa-solid fa-fingerprint text-6xl mb-4"></i>
+                    <p class="text-lg">Select an alert to analyze</p>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- CHATBOT FLOATING WIDGET -->
+    <div class="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+        
+        <!-- Chat Window (Hidden by default) -->
+        <div id="chatWindow" class="hidden w-[380px] h-[500px] bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl flex flex-col mb-4 overflow-hidden slide-in-bottom">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-blue-600 to-blue-800 p-3 flex justify-between items-center">
+                <div class="flex items-center gap-2 text-white font-bold text-sm">
+                    <i class="fa-solid fa-robot bg-white/20 p-1.5 rounded-full"></i> AI Investigator
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="clearChat()" class="text-white/70 hover:text-white text-xs" title="Xóa chat"><i class="fa-solid fa-trash-can"></i></button>
+                    <button onclick="toggleChat()" class="text-white/70 hover:text-white" title="Đóng"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            
+            <!-- Chat Body -->
+            <div id="chatHistory" class="flex-1 p-4 overflow-y-auto bg-slate-900/50 space-y-3">
+                <div class="chat-msg chat-bot shadow-sm text-xs">
+                    Xin chào! Tôi là trợ lý điều tra số. Bấm vào một cảnh báo trên bảng, tôi sẽ đọc log và trả lời mọi câu hỏi của bạn về nó.
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-3 bg-slate-800 border-t border-slate-700">
+                <form id="chatForm" class="flex gap-2 relative">
+                    <input type="text" id="chatInput" placeholder="Hỏi về IP, User, Hash..." autocomplete="off"
+                        class="flex-1 bg-slate-700 border border-slate-600 rounded-full px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition shadow-inner">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-500 w-9 h-9 rounded-full text-white transition shadow-lg flex items-center justify-center">
+                        <i class="fa-solid fa-paper-plane text-xs"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Floating Button (Bubble) -->
+        <button id="chatTrigger" onclick="toggleChat()" class="bg-blue-600 hover:bg-blue-500 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 border-4 border-slate-800 relative group">
+            <i class="fa-solid fa-comments text-2xl group-hover:hidden"></i> <!-- Icon Chat -->
+            <i class="fa-solid fa-chevron-down text-2xl hidden group-hover:block"></i> <!-- Icon Close khi hover -->
+            
+            <!-- Ping animation -->
+            <span class="absolute top-0 right-0 flex h-3 w-3"> 
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+            </span>
+        </button>
+    </div>
+
+    <!-- Demo Badge -->
+    <div id="demoBadge" class="demo-badge hidden flex items-center gap-2 ring-2 ring-yellow-600/50"><i class="fa-solid fa-triangle-exclamation"></i> DEMO MODE</div>
+
+    <script>
+        const API_URL = "http://localhost:8000/api";
+        let isDemoMode = false; let currentAlertId = null; let isChatOpen = false;
+        const MOCK_ALERTS = [{ id: 101, timestamp: new Date().toISOString(), severity: 12, attack_type: "SSH Brute-Force", source_ip: "192.168.1.105", rule_id: "5551", title: "Multiple failed logins", full_log: {}, ai_analysis: "**Demo:** Detected SSH Brute Force. Recommend blocking IP." }];
+
+        // --- Toggle Chat Widget ---
+        function toggleChat() {
+            const win = document.getElementById('chatWindow');
+            const btn = document.getElementById('chatTrigger');
+            isChatOpen = !isChatOpen;
+            
+            if (isChatOpen) {
+                win.classList.remove('hidden');
+                btn.classList.add('bg-slate-700'); // Đổi màu nút khi mở
+                setTimeout(() => document.getElementById('chatInput').focus(), 100); // Auto focus input
+            } else {
+                win.classList.add('hidden');
+                btn.classList.remove('bg-slate-700');
+            }
+        }
+
+        async function fetchAlerts() {
+            try {
+                const controller = new AbortController(); setTimeout(() => controller.abort(), 1500);
+                const res = await fetch(`${API_URL}/alerts/`, { signal: controller.signal });
+                const alerts = await res.json();
+                renderTable(alerts);
+                if (isDemoMode) { isDemoMode = false; document.getElementById('demoBadge').classList.add('hidden'); document.getElementById('statusIndicator').innerHTML = '<div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div> System Online'; }
+            } catch (err) { activateDemoMode(); }
+        }
+        
+        function activateDemoMode() { if(isDemoMode) return; isDemoMode = true; document.getElementById('demoBadge').classList.remove('hidden'); document.getElementById('statusIndicator').innerHTML = '<div class="w-2 h-2 bg-yellow-500 rounded-full"></div> Demo Mode'; renderTable(MOCK_ALERTS); }
+        
+        function renderTable(alerts) {
+            const tbody = document.getElementById('alertTableBody'); tbody.innerHTML = '';
+            alerts.forEach(a => {
+                const tr = document.createElement('tr'); 
+                tr.className = "hover:bg-slate-700/50 cursor-pointer border-b border-slate-800 transition duration-150 group"; 
+                tr.onclick = () => loadDetail(a);
+                
+                let sevClass = "text-blue-400 font-medium"; let sevLabel = "Low";
+                if(a.severity >= 5) { sevClass = "text-yellow-400 font-bold"; sevLabel = "Medium"; }
+                if(a.severity >= 10) { sevClass = "text-red-500 font-extrabold animate-pulse"; sevLabel = "CRITICAL"; }
+                
+                tr.innerHTML = `
+                    <td class="p-4 whitespace-nowrap text-slate-300 text-xs">
+                        <div class="font-bold">${new Date(a.timestamp).toLocaleTimeString()}</div>
+                        <div class="text-slate-500">${new Date(a.timestamp).toLocaleDateString()}</div>
+                    </td>
+                    <td class="p-4 ${sevClass} text-xs uppercase tracking-wider">${sevLabel} (${a.severity})</td>
+                    <td class="p-4 font-medium text-white group-hover:text-blue-300 transition text-sm">${a.attack_type}</td>
+                    <td class="p-4 font-mono text-slate-400 text-xs">${a.source_ip || 'N/A'}</td>
+                    <td class="p-4 text-right"><i class="fa-solid fa-chevron-right text-slate-600 group-hover:text-white transition"></i></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function loadDetail(data) {
+            currentAlertId = data.id; 
+            document.getElementById('detailId').innerText = `ID: ${data.shuffle_id || data.id}`;
+            
+            // Tự động mở chat nếu người dùng muốn (Optional)
+            // toggleChat(); 
+
+            const aiHtml = data.ai_analysis ? marked.parse(data.ai_analysis) : '<div class="flex items-center gap-2 text-slate-500 animate-pulse p-4"><i class="fa-solid fa-spinner fa-spin"></i> Analyzing...</div>';
+            
+            const logJson = JSON.stringify(data.full_log, null, 2);
+
+            document.getElementById('detailContent').innerHTML = `
+                <div class="space-y-6 animate-fadeIn pb-20">
+                    <!-- Title Header -->
+                    <div class="bg-gradient-to-r from-slate-800 to-slate-900 p-5 rounded-xl border border-slate-700 shadow-lg">
+                        <div class="flex items-start gap-3">
+                            <div class="bg-red-500/10 p-2 rounded text-red-500 mt-1"><i class="fa-solid fa-triangle-exclamation text-xl"></i></div>
+                            <div>
+                                <h4 class="text-white font-bold text-xl leading-tight">${data.title}</h4>
+                                <p class="text-slate-400 text-sm mt-2 font-mono bg-black/30 p-2 rounded border border-slate-700/50">${data.description}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Key Info -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700/50">
+                            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Rule ID / MITRE</div>
+                            <div class="text-blue-300 font-mono font-bold text-lg">${data.rule_id}</div>
+                            <div class="text-xs text-slate-500 mt-1">${data.mitre_tactic || 'N/A'}</div>
+                        </div>
+                        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700/50">
+                            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Attacker Source</div>
+                            <div class="text-red-400 font-mono font-bold text-lg flex items-center gap-2">
+                                ${data.source_ip} 
+                                <button class="text-[10px] bg-red-900/30 hover:bg-red-900/50 text-red-400 px-2 py-0.5 rounded border border-red-900/50 transition">Block</button>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-1">Dest: ${data.destination_ip || 'Server'}</div>
+                        </div>
+                    </div>
+
+                    <!-- AI Analysis (Full Width) -->
+                    <div class="bg-slate-800 rounded-xl border border-blue-900/30 shadow-inner relative overflow-hidden group">
+                        <div class="bg-slate-900/50 p-3 border-b border-slate-700/50 flex items-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i>
+                            <h4 class="font-bold text-purple-300 text-sm uppercase tracking-wide">AI Investigation Report</h4>
+                        </div>
+                        <div class="p-5 prose prose-invert prose-sm text-slate-300 max-w-none leading-relaxed">
+                            ${aiHtml}
+                        </div>
+                    </div>
+
+                    <!-- Raw Log (Collapsible style) -->
+                    <div>
+                         <div class="text-[10px] text-slate-500 uppercase font-bold mb-2 flex justify-between items-center px-1">
+                            <span><i class="fa-solid fa-code mr-1"></i> Raw Log Evidence</span>
+                            <button class="hover:text-white transition" onclick="navigator.clipboard.writeText(this.getAttribute('data-log'))" data-log='${logJson}'><i class="fa-regular fa-copy"></i> Copy JSON</button>
+                         </div>
+                         <pre class="bg-[#0d1117] p-4 rounded-xl text-[11px] text-green-500/90 font-mono overflow-x-auto border border-slate-800 max-h-60 shadow-inner scrollbar-thin leading-relaxed">${logJson}</pre>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chatInput'); const q = input.value.trim(); if(!q) return;
+            
+            const history = document.getElementById('chatHistory'); 
+            history.innerHTML += `<div class="chat-msg chat-user animate-slideUp">${q}</div>`; 
+            input.value = ''; history.scrollTop = history.scrollHeight;
+            
+            const loadingId = 'loading-' + Date.now(); 
+            history.innerHTML += `<div id="${loadingId}" class="chat-msg chat-bot flex items-center gap-2 text-slate-400 text-xs"><i class="fa-solid fa-circle-notch fa-spin"></i> Đang điều tra log...</div>`; 
+            history.scrollTop = history.scrollHeight;
+
+            let reply = "";
+            if(isDemoMode) { await new Promise(r => setTimeout(r, 800)); reply = `**(Demo Mode)**: Backend disconnected.`; } 
+            else { 
+                try { 
+                    const res = await fetch(`${API_URL}/chatbot/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question: q, context_alert_id: currentAlertId}) }); 
+                    const data = await res.json(); 
+                    reply = data.response; 
+                } catch(e) { reply = "⚠️ Lỗi kết nối AI."; } 
+            }
+            document.getElementById(loadingId).remove(); 
+            history.innerHTML += `<div class="chat-msg chat-bot animate-fadeIn text-xs">${marked.parse(reply)}</div>`; 
+            history.scrollTop = history.scrollHeight;
+        }
+
+        document.getElementById('chatForm').addEventListener('submit', function(e) { e.preventDefault(); sendChat(); });
+        function clearChat() { document.getElementById('chatHistory').innerHTML = '<div class="chat-msg chat-bot shadow-sm text-xs">Đã xóa lịch sử trò chuyện.</div>'; }
+        fetchAlerts(); setInterval(() => { if(!isDemoMode) fetchAlerts(); }, 10000);
+    </script>
+</body>
+</html>

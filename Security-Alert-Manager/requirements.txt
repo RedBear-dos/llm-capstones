@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+requests
+pymysql
+cryptography
+pydantic-settings
